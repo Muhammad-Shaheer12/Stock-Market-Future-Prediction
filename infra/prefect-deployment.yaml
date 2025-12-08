@@ -1,0 +1,15 @@
+name: mh-predictor-daily
+description: Daily training flow for Multi-Horizon Predictor
+flow_name: mh_predictor_flow
+entrypoint: src/prefect/flows.py:main_flow
+parameters:
+  symbol: ${DEFAULT_SYMBOL}
+work_pool_name: default-agent-pool
+work_queue_name: default
+schedule:
+  cron: "0 2 * * *"
+  timezone: UTC
+  day_or: true
+tags:
+  - training
+  - daily

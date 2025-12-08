@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite
+
+# Environments
+.venv/
+.env
+infra/.env
+
+# Data & models
+data/raw/
+models/*
+!models/production.txt
+
+# VS Code / OS
+.vscode/
+*.log
+.DS_Store
