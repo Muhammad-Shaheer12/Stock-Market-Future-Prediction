@@ -64,8 +64,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: false
-          tags: local/ml_project:ci
+            file: infra/Dockerfile
+            push: false
+            tags: local/ml_project:ci
 
   publish-image:
     runs-on: ubuntu-latest
