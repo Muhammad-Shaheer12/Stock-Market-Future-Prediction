@@ -47,7 +47,7 @@ jobs:
       - name: Type check (mypy)
         run: |
           source .venv/bin/activate
-          mypy src/api src/features src/models
+          mypy src
 
       - name: Run tests
         env:
