@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 import os
+
 os.environ.setdefault("ALPHAVANTAGE_API_KEY", "dummy")
 from src.api.app import app  # noqa: E402
 

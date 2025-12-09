@@ -16,7 +16,9 @@ def run_data_checks(df: pd.DataFrame) -> Dict[str, Any]:
     return {"passed": result.passed(), "summary": result.to_json()}
 
 
-def run_model_checks(df: pd.DataFrame, model, features: list[str], label_col: str) -> Dict[str, Any]:
+def run_model_checks(
+    df: pd.DataFrame, model, features: list[str], label_col: str
+) -> Dict[str, Any]:
     ds = build_dataset(df[features + [label_col]], label_col)
     suite = model_evaluation()
     result = suite.run(ds, model)

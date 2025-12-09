@@ -55,6 +55,7 @@ handler = logging.StreamHandler()
 handler.setLevel(logging.INFO)
 logger.addHandler(handler)
 
+
 @app.middleware("http")
 async def metrics_middleware(request, call_next):
     start = time.time()
@@ -63,7 +64,9 @@ async def metrics_middleware(request, call_next):
     path = request.url.path
     method = request.method
     REQUEST_LATENCY.labels(method=method, path=path).observe(latency)
-    REQUEST_COUNT.labels(method=method, path=path, status=str(response.status_code)).inc()
+    REQUEST_COUNT.labels(
+        method=method, path=path, status=str(response.status_code)
+    ).inc()
     req_id = request.headers.get("x-request-id") or str(int(start * 1000))
     response.headers["X-Request-ID"] = req_id
     log_obj = {
@@ -77,6 +80,7 @@ async def metrics_middleware(request, call_next):
     }
     logger.info(json.dumps(log_obj))
     return response
+
 
 @app.get("/metrics")
 def metrics():
@@ -292,6 +296,7 @@ def explain():
         imp = {}
     return {"feature_importance": imp}
 
+
 @app.post("/validate")
 def validate(symbol: str = DEFAULT_SYMBOL):
     client = AlphaVantageClient()
@@ -308,7 +313,9 @@ def validate(symbol: str = DEFAULT_SYMBOL):
         prod = load_production_model_dir()
         if prod:
             model = joblib.load(Path(prod) / "model_h1.joblib")
-            model_res = run_model_checks(df.dropna(), model, FEATURE_COLUMNS, label_col="label_1")
+            model_res = run_model_checks(
+                df.dropna(), model, FEATURE_COLUMNS, label_col="label_1"
+            )
         else:
             model_res = {"passed": False, "summary": {"error": "no_model"}}
     except Exception as e:
@@ -330,6 +337,7 @@ def retrain(x_api_key: str | None = Header(default=None)):
     df = add_labels(df, HORIZONS)
     out_dir = train_models(df)
     return {"status": "ok", "model_dir": str(out_dir)}
+
 
 @app.post("/flow/run")
 def run_flow(symbol: str | None = None, x_api_key: str | None = Header(default=None)):
