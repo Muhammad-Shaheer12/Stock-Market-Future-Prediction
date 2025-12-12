@@ -130,7 +130,7 @@ def predict(req: PredictRequest):
     except Exception:
         meta = {}
 
-    winners_by_h = {}
+    winners_by_h: dict[str, dict] = {}
     try:
         winners_by_h = meta.get("results") or {}
     except Exception:
@@ -143,9 +143,7 @@ def predict(req: PredictRequest):
         pred = float(model.predict(X)[0])
         winner = None
         try:
-            winner = (winners_by_h.get(h) or winners_by_h.get(str(h)) or {}).get(
-                "winner"
-            )
+            winner = (winners_by_h.get(str(h)) or {}).get("winner")
         except Exception:
             winner = None
         out[str(h)] = {"predicted_log_return": pred, "winner_model": winner}
