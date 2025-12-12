@@ -120,12 +120,36 @@ def predict(req: PredictRequest):
     prod = load_production_model_dir()
     if not prod:
         raise HTTPException(404, "No production model; please train first")
+
+    meta = {}
+    try:
+        meta_path = Path(prod) / "meta.json"
+        if meta_path.exists():
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+    except Exception:
+        meta = {}
+
+    winners_by_h = {}
+    try:
+        winners_by_h = meta.get("results") or {}
+    except Exception:
+        winners_by_h = {}
+
     out = {}
     X = df[FEATURE_COLUMNS].fillna(0.0).iloc[-1:]
     for h in HORIZONS:
         model = joblib.load(Path(prod) / f"model_h{h}.joblib")
         pred = float(model.predict(X)[0])
-        out[str(h)] = pred
+        winner = None
+        try:
+            winner = (winners_by_h.get(h) or winners_by_h.get(str(h)) or {}).get(
+                "winner"
+            )
+        except Exception:
+            winner = None
+        out[str(h)] = {"predicted_log_return": pred, "winner_model": winner}
+
     return {"symbol": symbol, "predicted_log_returns": out}
 
 
