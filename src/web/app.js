@@ -22,10 +22,14 @@ function renderPredictions(preds){
   el.innerHTML = '';
   const order = ['1','3','7','30'];
   order.forEach(h=>{
-    const v = preds[h];
+    const obj = preds[h];
+    const v = (obj && typeof obj === 'object') ? obj.predicted_log_return : obj;
+    const winner = (obj && typeof obj === 'object') ? obj.winner_model : null;
     const card = document.createElement('div');
     card.className = 'kpi';
-    card.innerHTML = `<div>H${h}</div><div><strong>${(v*100).toFixed(2)}%</strong></div>`;
+    const pct = (Number(v) * 100).toFixed(2);
+    const winnerTxt = winner ? `<div class="sub">winner: ${winner}</div>` : '';
+    card.innerHTML = `<div>H${h}</div><div><strong>${pct}%</strong></div>${winnerTxt}`;
     el.appendChild(card);
   });
 }
