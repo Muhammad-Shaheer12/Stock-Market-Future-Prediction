@@ -9,32 +9,99 @@
 </head>
 <body>
   <header>
-    <h1>Multi-Horizon Price Predictor</h1>
-    <p>Alpha Vantage powered — Forecast horizons: 1, 3, 7, 30 days</p>
+    <div>
+      <h1>Multi-Horizon Price Predictor</h1>
+      <p>Alpha Vantage powered — Predictions first, deeper analytics one click away</p>
+    </div>
+    <nav class="nav">
+      <button id="navPred" class="btn btn-secondary">Predictions</button>
+      <button id="navDetails" class="btn btn-secondary">Further details</button>
+    </nav>
   </header>
 
   <main>
     <section class="card controls">
       <label>Symbol <input id="symbol" value="AAPL" /></label>
       <button id="predict">Get Predictions</button>
+      <button id="more" class="btn btn-secondary">Further details</button>
       <a class="link" href="/docs">API Docs</a>
     </section>
 
-    <section class="grid2">
-      <div class="card">
-        <h2>Recent Prices</h2>
-        <canvas id="chart" height="120"></canvas>
-      </div>
-      <div class="card">
-        <h2>Predicted Log Returns</h2>
-        <div id="predictions" class="cards"></div>
-        <div id="model-info" class="muted"></div>
-      </div>
+    <section id="viewPred">
+      <section class="grid2">
+        <div class="card">
+          <h2>Recent Prices</h2>
+          <canvas id="chart" height="120"></canvas>
+        </div>
+        <div class="card">
+          <h2>Predicted Log Returns</h2>
+          <div id="predictions" class="cards"></div>
+          <div id="model-info" class="muted"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Backtest Summary</h2>
+        <table id="backtest"><tbody></tbody></table>
+      </section>
     </section>
 
-    <section class="card">
-      <h2>Backtest Summary</h2>
-      <table id="backtest"><tbody></tbody></table>
+    <section id="viewDetails" style="display:none">
+      <section class="card">
+        <div class="row">
+          <div>
+            <h2 style="margin:0">Further details</h2>
+            <p class="muted" style="margin:6px 0 0">Beta vs SPY, correlation, volatility, drawdown, and uncertainty</p>
+          </div>
+          <div class="actions">
+            <button id="refreshDetails" class="btn">Refresh</button>
+          </div>
+        </div>
+
+        <section class="grid3" style="margin-top:12px">
+          <div class="kpi">
+            <div class="kpi-label">Beta vs SPY</div>
+            <div id="kpiBeta" class="kpi-value">—</div>
+            <div class="sub">Uses daily log returns</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Max drawdown</div>
+            <div id="kpiMdd" class="kpi-value">—</div>
+            <div class="sub">From cumulative log returns</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Intervals</div>
+            <div id="kpiInt" class="kpi-value">—</div>
+            <div class="sub">Per-horizon prediction bands</div>
+          </div>
+        </section>
+
+        <div id="detailsStatus" class="muted" style="margin-top:10px"></div>
+      </section>
+
+      <section class="grid2">
+        <div class="card">
+          <h2>Correlation heatmap</h2>
+          <div class="heatmap-wrap">
+            <canvas id="corrHeatmap" height="260"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Uncertainty (prediction intervals)</h2>
+          <canvas id="intervalsChart" height="260"></canvas>
+        </div>
+      </section>
+
+      <section class="grid2">
+        <div class="card">
+          <h2>Annualized rolling volatility</h2>
+          <canvas id="volChart" height="240"></canvas>
+        </div>
+        <div class="card">
+          <h2>ATR & drawdown</h2>
+          <canvas id="atrDdChart" height="240"></canvas>
+        </div>
+      </section>
     </section>
   </main>
 

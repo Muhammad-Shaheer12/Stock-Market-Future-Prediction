@@ -17,6 +17,19 @@ async function loadPrices(symbol){
   if(!r.ok){ throw new Error(`Prices fetch failed: ${r.status}`); }
   return await r.json();
 }
+
+async function loadDetails(symbol){
+  const r = await fetch('/details',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({symbol})
+  });
+  if(!r.ok){
+    const txt = await r.text();
+    throw new Error(`Details fetch failed: ${r.status} ${txt}`);
+  }
+  return await r.json();
+}
 function renderPredictions(preds){
   const el = document.getElementById('predictions');
   el.innerHTML = '';
@@ -83,10 +96,235 @@ function renderChart(labels, values){
     }
   });
 }
+
+function setActiveView(view){
+  const pred = document.getElementById('viewPred');
+  const det = document.getElementById('viewDetails');
+  if(!pred || !det) return;
+  if(view === 'details'){
+    pred.style.display = 'none';
+    det.style.display = '';
+  }else{
+    det.style.display = 'none';
+    pred.style.display = '';
+  }
+}
+
+function fmtPct(x){
+  if(x === null || x === undefined || !isFinite(Number(x))) return '—';
+  return `${(Number(x) * 100).toFixed(2)}%`;
+}
+
+function renderHeatmap(canvasId, symbols, matrix){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const n = symbols.length;
+  if(window._corrChart) window._corrChart.destroy();
+  if(!n || !matrix || !matrix.length){
+    window._corrChart = new Chart(ctx,{type:'bar',data:{labels:[],datasets:[]}});
+    return;
+  }
+  const points = [];
+  for(let i=0;i<n;i++){
+    for(let j=0;j<n;j++){
+      points.push({x:j,y:i,v:matrix[i][j]});
+    }
+  }
+  const min = -1, max = 1;
+  const colorFor = (v)=>{
+    const t = (v - min) / (max - min);
+    const r = Math.round(30 + 180*(1-t));
+    const g = Math.round(60 + 120*(t));
+    const b = 120;
+    return `rgb(${r},${g},${b})`;
+  };
+  window._corrChart = new Chart(ctx,{
+    type:'scatter',
+    data:{datasets:[{
+      label:'corr',
+      data:points,
+      pointRadius: (ctx)=>{
+        const area = ctx.chart.chartArea;
+        if(!area) return 6;
+        const w = (area.right - area.left) / n;
+        const h = (area.bottom - area.top) / n;
+        return Math.max(5, Math.min(w,h) * 0.45);
+      },
+      pointHoverRadius: 8,
+      backgroundColor: (c)=> colorFor(c.raw.v)
+    }]},
+    options:{
+      responsive:true,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{
+            label: (c)=>{
+              const i = c.raw.y, j = c.raw.x;
+              return `${symbols[i]} vs ${symbols[j]}: ${Number(c.raw.v).toFixed(2)}`;
+            }
+          }
+        }
+      },
+      scales:{
+        x:{
+          type:'linear',
+          min:-0.5,max:n-0.5,
+          ticks:{
+            stepSize:1,
+            color:'#93a3b8',
+            callback:(v)=> symbols[Number(v)] || ''
+          },
+          grid:{color:'rgba(148,163,184,0.15)'}
+        },
+        y:{
+          type:'linear',
+          min:-0.5,max:n-0.5,
+          ticks:{
+            stepSize:1,
+            color:'#93a3b8',
+            callback:(v)=> symbols[Number(v)] || ''
+          },
+          grid:{color:'rgba(148,163,184,0.15)'}
+        }
+      }
+    }
+  });
+}
+
+function renderLineChart(canvasId, label, labels, values, color){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const key = `_chart_${canvasId}`;
+  if(window[key]) window[key].destroy();
+  window[key] = new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets:[{label,data:values,borderColor:color,backgroundColor:'rgba(96,165,250,0.18)',tension:0.2,fill:true,pointRadius:0}]},
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{color:'#e2e8f0'}}},
+      scales:{x:{ticks:{color:'#93a3b8'}},y:{ticks:{color:'#93a3b8'}}}
+    }
+  });
+}
+
+function renderAtrDd(canvasId, atr, dd){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if(window._atrDd) window._atrDd.destroy();
+  const labels = (dd.dates||[]);
+  const ddVals = (dd.values||[]);
+  // Align ATR to drawdown length by using its own dates on a second axis; keep simple.
+  window._atrDd = new Chart(ctx,{
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        {label:'Drawdown',data:ddVals,borderColor:'#f97316',backgroundColor:'rgba(249,115,22,0.12)',tension:0.2,fill:true,pointRadius:0,yAxisID:'y'},
+        {label:'ATR (14)',data:(atr.values||[]),borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,0.10)',tension:0.2,fill:false,pointRadius:0,yAxisID:'y2'}
+      ]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{color:'#e2e8f0'}}},
+      scales:{
+        x:{ticks:{color:'#93a3b8'}},
+        y:{ticks:{color:'#93a3b8'},title:{display:true,text:'Drawdown',color:'#93a3b8'}},
+        y2:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#93a3b8'},title:{display:true,text:'ATR',color:'#93a3b8'}}
+      }
+    }
+  });
+}
+
+function renderIntervals(canvasId, intervals){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if(window._intervals) window._intervals.destroy();
+  const hs = Object.keys(intervals||{}).sort((a,b)=>Number(a)-Number(b));
+  const pred = hs.map(h=> intervals[h].pred);
+  const lo = hs.map(h=> intervals[h].lo);
+  const hi = hs.map(h=> intervals[h].hi);
+  window._intervals = new Chart(ctx,{
+    type:'line',
+    data:{
+      labels: hs.map(h=>`H${h}`),
+      datasets:[
+        {label:'Pred',data:pred,borderColor:'#60a5fa',tension:0.2,pointRadius:3},
+        {label:'Low',data:lo,borderColor:'rgba(148,163,184,0.7)',tension:0.2,pointRadius:0},
+        {label:'High',data:hi,borderColor:'rgba(148,163,184,0.7)',tension:0.2,pointRadius:0}
+      ]
+    },
+    options:{
+      responsive:true,
+      plugins:{
+        legend:{labels:{color:'#e2e8f0'}},
+        tooltip:{callbacks:{label:(c)=> `${c.dataset.label}: ${(Number(c.parsed.y)*100).toFixed(2)}%`}}
+      },
+      scales:{x:{ticks:{color:'#93a3b8'}},y:{ticks:{color:'#93a3b8',callback:(v)=>`${(Number(v)*100).toFixed(1)}%`}}}
+    }
+  });
+}
+
+function renderDetails(d){
+  document.getElementById('kpiBeta').textContent = (Number(d.beta_vs_spy)||0).toFixed(2);
+  document.getElementById('kpiMdd').textContent = fmtPct(d.drawdown?.max_drawdown);
+  const level = d.prediction_intervals ? (Object.values(d.prediction_intervals)[0]?.level) : null;
+  document.getElementById('kpiInt').textContent = level ? `${Math.round(Number(level)*100)}%` : '—';
+
+  const corr = d.correlation || {};
+  renderHeatmap('corrHeatmap', corr.symbols||[], corr.matrix||[]);
+
+  const vol = d.volatility || {};
+  renderLineChart('volChart','Volatility',vol.dates||[],vol.annualized||[],'#60a5fa');
+
+  renderAtrDd('atrDdChart', d.atr||{}, d.drawdown||{});
+  renderIntervals('intervalsChart', d.prediction_intervals||{});
+}
 async function main(){
   const input = document.getElementById('symbol');
   const btn = document.getElementById('predict');
+  const navPred = document.getElementById('navPred');
+  const navDetails = document.getElementById('navDetails');
+  const more = document.getElementById('more');
+  const refreshDetails = document.getElementById('refreshDetails');
+  const detailsStatus = document.getElementById('detailsStatus');
   let busy = false;
+  let detailsBusy = false;
+
+  const goDetails = async ()=>{
+    if(detailsBusy) return;
+    detailsBusy = true;
+    const sym = input.value.trim()||'AAPL';
+    setActiveView('details');
+    if(detailsStatus) detailsStatus.textContent = `Loading details for ${sym}...`;
+    if(navDetails) navDetails.disabled = true;
+    if(more) more.disabled = true;
+    if(refreshDetails) refreshDetails.disabled = true;
+    try{
+      const d = await loadDetails(sym);
+      renderDetails(d);
+      if(detailsStatus) detailsStatus.textContent = `Loaded details for ${sym}.`;
+    }catch(e){
+      console.error(e);
+      if(detailsStatus) detailsStatus.textContent = `Failed to load details: ${e?.message || e}`;
+    }
+    finally{
+      if(navDetails) navDetails.disabled = false;
+      if(more) more.disabled = false;
+      if(refreshDetails) refreshDetails.disabled = false;
+      detailsBusy = false;
+    }
+  };
+
+  if(navPred) navPred.addEventListener('click', ()=> setActiveView('pred'));
+  if(navDetails) navDetails.addEventListener('click', ()=> goDetails());
+  if(more) more.addEventListener('click', ()=> goDetails());
+  if(refreshDetails) refreshDetails.addEventListener('click', ()=> goDetails());
+
   btn.addEventListener('click', async ()=>{
     if(busy || btn.disabled) return;
     busy = true;
@@ -99,6 +337,7 @@ async function main(){
       renderBacktest(bt);
       const pr = await loadPrices(sym);
       renderChart(pr.labels||[], pr.values||[]);
+      setActiveView('pred');
     }catch(e){ console.error(e); }
     finally{ btn.disabled = false; btn.textContent = 'Get Predictions'; busy = false; }
   });
