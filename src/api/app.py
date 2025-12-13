@@ -210,7 +210,6 @@ def _prediction_intervals(
         y = d[label_col].astype(float)
 
         split = int(len(d) * 0.8)
-        Xtr, ytr = X.iloc[:split], y.iloc[:split]
         Xte, yte = X.iloc[split:], y.iloc[split:]
 
         model = joblib.load(Path(prod_dir) / f"model_h{h}.joblib")
