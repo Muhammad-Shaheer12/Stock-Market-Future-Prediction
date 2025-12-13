@@ -29,7 +29,7 @@ from src.models.recommend import recommend as reco
 from src.models.associations import up_down_baskets
 from src.prefect.flows import main_flow
 from src.validation.deepchecks_suite import run_data_checks, run_model_checks
-from typing import Any
+from typing import Any, Sequence
 from statistics import NormalDist
 
 app = FastAPI(title="Multi-Horizon Price Predictor")
@@ -177,7 +177,7 @@ def _z_for_interval(level: float) -> float:
 def _prediction_intervals(
     df: pd.DataFrame,
     prod_dir: Path,
-    horizons: list[int],
+    horizons: Sequence[int],
     interval_level: float,
 ) -> dict[str, dict[str, float | str | None]]:
     out: dict[str, dict[str, float | str | None]] = {}
