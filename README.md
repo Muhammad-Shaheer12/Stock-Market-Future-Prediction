@@ -60,6 +60,27 @@ docker compose up --build
 # Open http://127.0.0.1:8000/
 ```
 
+## Deploy (Render + Streamlit Cloud)
+
+### 1) Deploy backend (FastAPI) on Render
+- Create a **New Web Service** on Render from this GitHub repo.
+- Choose **Docker**.
+- Dockerfile path: `infra/Dockerfile`
+- Set **Environment Variables**:
+  - `ALPHAVANTAGE_API_KEY` = your Alpha Vantage key
+  - `DEFAULT_SYMBOL` = e.g. `AAPL`
+- After deploy, note your backend URL (example): `https://your-api.onrender.com`
+- Verify:
+  - `GET https://your-api.onrender.com/health`
+
+### 2) Deploy frontend on Streamlit Community Cloud
+- Create a new Streamlit app from this repo.
+- App file: `streamlit_app.py`
+- In Streamlit **Secrets**, add:
+  - `API_URL = "https://your-api.onrender.com"`
+
+The Streamlit app calls your deployed API endpoints (`/prices`, `/predict`, `/details`).
+
 ## Prefect Flow
 ```bash
 python -m prefect version
