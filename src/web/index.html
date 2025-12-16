@@ -94,6 +94,44 @@
 
       <section class="grid2">
         <div class="card">
+          <h2>PCA (2D projection)</h2>
+          <canvas id="pcaChart" height="260"></canvas>
+        </div>
+        <div class="card">
+          <h2>Clustering (KMeans)</h2>
+          <canvas id="clusterChart" height="260"></canvas>
+          <div id="clusterSummary" class="muted" style="margin-top:8px"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="row">
+          <div>
+            <h2 style="margin:0">Pattern mining (association rules)</h2>
+            <p class="muted" style="margin:6px 0 0">Rules across a default universe (may be slower on a cold cache)</p>
+          </div>
+          <div class="actions">
+            <button id="loadRules" class="btn btn-secondary">Load rules</button>
+          </div>
+        </div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table id="rulesTable">
+            <thead>
+              <tr>
+                <th>Antecedents</th>
+                <th>Consequents</th>
+                <th>Support</th>
+                <th>Confidence</th>
+                <th>Lift</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="grid2">
+        <div class="card">
           <h2>Annualized rolling volatility</h2>
           <canvas id="volChart" height="240"></canvas>
         </div>

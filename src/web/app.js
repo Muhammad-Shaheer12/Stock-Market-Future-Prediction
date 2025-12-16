@@ -30,6 +30,33 @@ async function loadDetails(symbol){
   }
   return await r.json();
 }
+
+async function loadPca(symbol){
+  const r = await fetch(`/dimred/pca?symbol=${encodeURIComponent(symbol)}`);
+  if(!r.ok){
+    const txt = await r.text();
+    throw new Error(`PCA fetch failed: ${r.status} ${txt}`);
+  }
+  return await r.json();
+}
+
+async function loadCluster(symbol, k=4){
+  const r = await fetch(`/cluster/assets?symbol=${encodeURIComponent(symbol)}&k=${encodeURIComponent(k)}`);
+  if(!r.ok){
+    const txt = await r.text();
+    throw new Error(`Cluster fetch failed: ${r.status} ${txt}`);
+  }
+  return await r.json();
+}
+
+async function loadAssociations(horizon=1){
+  const r = await fetch(`/associations?horizon=${encodeURIComponent(horizon)}`);
+  if(!r.ok){
+    const txt = await r.text();
+    throw new Error(`Rules fetch failed: ${r.status} ${txt}`);
+  }
+  return await r.json();
+}
 function renderPredictions(preds){
   const el = document.getElementById('predictions');
   el.innerHTML = '';
@@ -269,6 +296,98 @@ function renderIntervals(canvasId, intervals){
   });
 }
 
+function renderPca(canvasId, pca){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if(window._pcaChart) window._pcaChart.destroy();
+
+  const labels = pca?.labels || [];
+  const pts = (pca?.points||[]).map((xy,i)=>({x:Number(xy[0]),y:Number(xy[1]),label:labels[i]}));
+  if(!pts.length){
+    window._pcaChart = new Chart(ctx,{type:'scatter',data:{datasets:[]}});
+    return;
+  }
+  window._pcaChart = new Chart(ctx,{
+    type:'scatter',
+    data:{datasets:[{label:'PCA',data:pts,backgroundColor:'rgba(96,165,250,0.45)',borderColor:'#60a5fa',pointRadius:3}]},
+    options:{
+      responsive:true,
+      plugins:{
+        legend:{labels:{color:'#e2e8f0'}},
+        tooltip:{callbacks:{label:(c)=>{
+          const d = c.raw;
+          const ds = d.label ? ` (${d.label})` : '';
+          return `(${Number(d.x).toFixed(2)}, ${Number(d.y).toFixed(2)})${ds}`;
+        }}}
+      },
+      scales:{
+        x:{ticks:{color:'#93a3b8'},grid:{color:'rgba(148,163,184,0.15)'}},
+        y:{ticks:{color:'#93a3b8'},grid:{color:'rgba(148,163,184,0.15)'}}
+      }
+    }
+  });
+}
+
+function renderCluster(canvasId, cluster){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const labels = cluster?.labels || [];
+  const k = Number(cluster?.k || 0);
+  if(window._clusterChart) window._clusterChart.destroy();
+
+  if(!labels.length || !k){
+    window._clusterChart = new Chart(ctx,{type:'bar',data:{labels:[],datasets:[]}});
+    return;
+  }
+
+  const counts = Array.from({length:k}, ()=>0);
+  labels.forEach((x)=>{
+    const i = Number(x);
+    if(Number.isInteger(i) && i>=0 && i<k) counts[i] += 1;
+  });
+  const xs = counts.map((_,i)=>`C${i}`);
+  window._clusterChart = new Chart(ctx,{
+    type:'bar',
+    data:{labels:xs,datasets:[{label:'Days per cluster',data:counts,backgroundColor:'rgba(34,197,94,0.45)',borderColor:'#22c55e',borderWidth:1}]},
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{color:'#e2e8f0'}}},
+      scales:{x:{ticks:{color:'#93a3b8'}},y:{ticks:{color:'#93a3b8'},grid:{color:'rgba(148,163,184,0.15)'}}}
+    }
+  });
+
+  const el = document.getElementById('clusterSummary');
+  if(el){
+    const n = labels.length;
+    const pct = counts.map(c=> n? `${Math.round((c/n)*100)}%`:'0%');
+    el.textContent = `k=${k} over ${n} days • distribution: ${pct.join(', ')}`;
+  }
+}
+
+function renderRules(rules){
+  const tbody = document.querySelector('#rulesTable tbody');
+  if(!tbody) return;
+  tbody.innerHTML = '';
+  const rows = (rules?.rules || []).slice(0, 20);
+  rows.forEach((r)=>{
+    const tr = document.createElement('tr');
+    const ants = (r.antecedents||[]).join(', ');
+    const cons = (r.consequents||[]).join(', ');
+    const support = (Number(r.support)||0).toFixed(3);
+    const conf = (Number(r.confidence)||0).toFixed(3);
+    const lift = (Number(r.lift)||0).toFixed(3);
+    tr.innerHTML = `<td>${ants}</td><td>${cons}</td><td>${support}</td><td>${conf}</td><td>${lift}</td>`;
+    tbody.appendChild(tr);
+  });
+  if(!rows.length){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="5" class="muted">No rules returned.</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
 function renderDetails(d){
   document.getElementById('kpiBeta').textContent = (Number(d.beta_vs_spy)||0).toFixed(2);
   document.getElementById('kpiMdd').textContent = fmtPct(d.drawdown?.max_drawdown);
@@ -291,9 +410,11 @@ async function main(){
   const navDetails = document.getElementById('navDetails');
   const more = document.getElementById('more');
   const refreshDetails = document.getElementById('refreshDetails');
+  const loadRulesBtn = document.getElementById('loadRules');
   const detailsStatus = document.getElementById('detailsStatus');
   let busy = false;
   let detailsBusy = false;
+  let rulesBusy = false;
 
   const goDetails = async ()=>{
     if(detailsBusy) return;
@@ -307,7 +428,19 @@ async function main(){
     try{
       const d = await loadDetails(sym);
       renderDetails(d);
-      if(detailsStatus) detailsStatus.textContent = `Loaded details for ${sym}.`;
+      if(detailsStatus) detailsStatus.textContent = `Loaded details for ${sym}. Loading PCA and clustering...`;
+      try{
+        const [pca, cluster] = await Promise.all([
+          loadPca(sym),
+          loadCluster(sym, 4)
+        ]);
+        renderPca('pcaChart', pca);
+        renderCluster('clusterChart', cluster);
+        if(detailsStatus) detailsStatus.textContent = `Loaded details for ${sym}.`;
+      }catch(e){
+        console.error(e);
+        if(detailsStatus) detailsStatus.textContent = `Loaded details for ${sym}, but PCA/cluster failed: ${e?.message || e}`;
+      }
     }catch(e){
       console.error(e);
       if(detailsStatus) detailsStatus.textContent = `Failed to load details: ${e?.message || e}`;
@@ -324,6 +457,27 @@ async function main(){
   if(navDetails) navDetails.addEventListener('click', ()=> goDetails());
   if(more) more.addEventListener('click', ()=> goDetails());
   if(refreshDetails) refreshDetails.addEventListener('click', ()=> goDetails());
+
+  if(loadRulesBtn) loadRulesBtn.addEventListener('click', async ()=>{
+    if(rulesBusy) return;
+    rulesBusy = true;
+    loadRulesBtn.disabled = true;
+    const prev = loadRulesBtn.textContent;
+    loadRulesBtn.textContent = 'Loading...';
+    if(detailsStatus) detailsStatus.textContent = 'Loading association rules (may take longer on first run)...';
+    try{
+      const r = await loadAssociations(1);
+      renderRules(r);
+      if(detailsStatus) detailsStatus.textContent = 'Loaded association rules.';
+    }catch(e){
+      console.error(e);
+      if(detailsStatus) detailsStatus.textContent = `Failed to load rules: ${e?.message || e}`;
+    }finally{
+      loadRulesBtn.disabled = false;
+      loadRulesBtn.textContent = prev;
+      rulesBusy = false;
+    }
+  });
 
   btn.addEventListener('click', async ()=>{
     if(busy || btn.disabled) return;
