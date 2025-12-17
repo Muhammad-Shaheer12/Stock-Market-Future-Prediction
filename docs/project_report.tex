@@ -1,0 +1,726 @@
+\documentclass[12pt,a4paper]{article}
+
+% ============== PACKAGES ==============
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+
+% ============== CODE LISTING STYLE ==============
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+% ============== HEADER/FOOTER ==============
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Stock Market Future Prediction}
+\lhead{Project Report}
+\rfoot{Page \thepage}
+
+% ============== TITLE ==============
+\title{
+    \textbf{Stock Market Future Prediction} \\
+    \large A Multi-Horizon Machine Learning System for Price Forecasting \\
+    \vspace{0.5cm}
+    \normalsize Project Report
+}
+\author{Muhammad Shaheer}
+\date{December 2025}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\newpage
+\tableofcontents
+\newpage
+
+% ==============================================================================
+\section{Executive Summary}
+% ==============================================================================
+
+This project implements an end-to-end machine learning system for stock market price prediction. The system fetches real-time market data from Alpha Vantage, engineers financial features, trains multi-horizon regression and classification models, and exposes predictions through a RESTful API with an interactive web interface.
+
+Key capabilities include:
+\begin{itemize}
+    \item Multi-horizon price prediction (1, 3, 7, 30 days ahead)
+    \item Binary classification for price direction (up/down)
+    \item PCA-based dimensionality reduction for visualization
+    \item KMeans clustering for market regime detection
+    \item Association rule mining for co-movement patterns
+    \item Automated model training pipeline with Prefect orchestration
+    \item Data quality validation with Deepchecks
+    \item Containerized deployment with Docker
+\end{itemize}
+
+% ==============================================================================
+\section{Introduction}
+% ==============================================================================
+
+\subsection{Problem Statement}
+Stock market prediction is a challenging task due to the inherent noise, non-stationarity, and complexity of financial time series. This project addresses the problem of predicting future stock price movements using machine learning techniques applied to historical price data and engineered technical indicators.
+
+\subsection{Objectives}
+\begin{enumerate}
+    \item Build a robust data pipeline for fetching and caching market data
+    \item Engineer meaningful features from OHLCV (Open, High, Low, Close, Volume) data
+    \item Train and evaluate multiple regression models for return prediction
+    \item Implement classification for directional forecasting
+    \item Deploy the system as an accessible API with web interface
+    \item Ensure reproducibility through containerization and CI/CD
+\end{enumerate}
+
+\subsection{Scope}
+The system currently supports:
+\begin{itemize}
+    \item Any equity or ETF symbol available through Alpha Vantage
+    \item Default universe: AAPL, MSFT, GOOGL, AMZN, META, NVDA, TSLA, SPY
+    \item Prediction horizons: 1, 3, 7, and 30 trading days
+\end{itemize}
+
+% ==============================================================================
+\section{System Architecture}
+% ==============================================================================
+
+\subsection{High-Level Overview}
+
+The system follows a modular architecture with clear separation of concerns:
+
+\begin{verbatim}
+┌─────────────────────────────────────────────────────────────────┐
+│                        Web Interface                            │
+│                       (Static HTML/JS)                          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        FastAPI Backend                          │
+│   /predict  /prices  /details  /classify  /cluster  /pca ...   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│   ML Models     │  │ Feature Engine  │  │  Data Layer     │
+│ (train, predict)│  │ (engineering)   │  │ (Alpha Vantage) │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+          │
+          ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Prefect Orchestration                        │
+│              (Scheduled training + Deepchecks)                  │
+└─────────────────────────────────────────────────────────────────┘
+\end{verbatim}
+
+\subsection{Directory Structure}
+
+\begin{lstlisting}[language=bash, caption=Project Structure]
+ML_Project/
+├── src/
+│   ├── api/           # FastAPI application
+│   │   └── app.py     # Main API with all endpoints
+│   ├── data/          # Data fetching and caching
+│   │   ├── alpha.py   # Alpha Vantage client
+│   │   └── cache.py   # Disk caching utilities
+│   ├── features/      # Feature engineering
+│   │   └── engineering.py
+│   ├── models/        # ML models
+│   │   ├── train.py       # Multi-horizon regression
+│   │   ├── classify.py    # Binary classification
+│   │   ├── backtest.py    # Strategy backtesting
+│   │   ├── dimred.py      # PCA dimensionality reduction
+│   │   ├── cluster.py     # KMeans clustering
+│   │   ├── recommend.py   # Symbol recommendation
+│   │   ├── associations.py # Association rule mining
+│   │   └── multi_asset.py # Universe fetching
+│   ├── prefect/       # Orchestration
+│   │   └── flows.py   # Training pipeline
+│   ├── validation/    # Data/model validation
+│   │   └── deepchecks_suite.py
+│   ├── utils/         # Configuration
+│   │   └── config.py
+│   └── web/           # Static frontend
+│       ├── index.html
+│       ├── app.js
+│       └── styles.css
+├── infra/             # Infrastructure
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   └── .env
+├── models/            # Trained model artifacts
+├── data/              # Cached market data
+├── tests/             # Unit tests
+├── streamlit_app.py   # Alternative Streamlit UI
+└── requirements.txt
+\end{lstlisting}
+
+% ==============================================================================
+\section{Data Pipeline}
+% ==============================================================================
+
+\subsection{Data Source}
+
+The system uses \textbf{Alpha Vantage} as the primary data source, fetching daily OHLCV data through the \texttt{TIME\_SERIES\_DAILY} endpoint.
+
+\subsubsection{Alpha Vantage Client}
+Located in \texttt{src/data/alpha.py}:
+
+\begin{lstlisting}[language=Python, caption=Alpha Vantage Client]
+class AlphaVantageClient:
+    def __init__(self, api_key=None, rate_limit_s=None):
+        self.api_key = api_key or ALPHAVANTAGE_API_KEY
+        self.rate_limit_s = rate_limit_s or 12.0  # Free tier limit
+        
+    def daily_adjusted(self, symbol, outputsize="compact"):
+        # Check cache first
+        if cached and valid:
+            return cached
+        # Rate-limit and fetch
+        self._throttle()
+        response = requests.get(BASE_URL, params=...)
+        # Only cache valid responses
+        if self._valid_daily(js):
+            cache_to_disk(js)
+        return js
+\end{lstlisting}
+
+Key features:
+\begin{itemize}
+    \item \textbf{Rate limiting}: 12-second delay between requests (free tier)
+    \item \textbf{Disk caching}: Responses cached in \texttt{data/raw/}
+    \item \textbf{Retry logic}: 3 attempts with exponential backoff
+    \item \textbf{Validation}: Only caches valid responses with actual data
+\end{itemize}
+
+\subsection{Feature Engineering}
+
+Located in \texttt{src/features/engineering.py}, the feature pipeline transforms raw OHLCV data into ML-ready features.
+
+\subsubsection{Feature Categories}
+
+\begin{table}[H]
+\centering
+\caption{Engineered Features}
+\begin{tabular}{lll}
+\toprule
+\textbf{Category} & \textbf{Features} & \textbf{Description} \\
+\midrule
+Returns & log\_ret, ret\_5d, ret\_10d & Log returns over various windows \\
+Moving Averages & sma\_20, ema\_20 & Simple and exponential averages \\
+Momentum & rsi\_14, macd, macd\_signal & RSI and MACD indicators \\
+Volatility & volatility\_20 & 20-day rolling standard deviation \\
+Calendar & day\_of\_week, month, day\_of\_month & Temporal patterns \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Label Generation}
+
+For multi-horizon prediction, labels are forward log-returns:
+\begin{equation}
+\text{label}_h = \log\left(\frac{P_{t+h}}{P_t}\right)
+\end{equation}
+
+where $P_t$ is the adjusted close price at time $t$ and $h$ is the horizon in trading days.
+
+% ==============================================================================
+\section{Machine Learning Models}
+% ==============================================================================
+
+\subsection{Multi-Horizon Regression}
+
+Located in \texttt{src/models/train.py}, this module trains regression models to predict future log-returns.
+
+\subsubsection{Model Selection}
+
+For each horizon $h \in \{1, 3, 7, 30\}$, five candidate models are trained:
+
+\begin{table}[H]
+\centering
+\caption{Regression Model Candidates}
+\begin{tabular}{llp{6cm}}
+\toprule
+\textbf{Model} & \textbf{Key Parameters} & \textbf{Rationale} \\
+\midrule
+Linear Regression & Default & Baseline model \\
+Ridge & $\alpha=1.0$ & L2 regularization for multicollinearity \\
+ElasticNet & $\alpha=0.001$, $l_1=0.2$ & Combined L1/L2 for feature selection \\
+Random Forest & 300 trees, depth=5 & Non-linear relationships \\
+XGBoost & 300 trees, lr=0.05 & Gradient boosting for complex patterns \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Walk-Forward Validation}
+
+The system uses time-series aware validation:
+\begin{lstlisting}[language=Python, caption=Walk-Forward Split]
+def walk_forward_split(df, train_ratio=0.8):
+    n = len(df)
+    split = int(n * train_ratio)
+    return df.iloc[:split], df.iloc[split:]  # No shuffling!
+\end{lstlisting}
+
+This prevents look-ahead bias by ensuring the test set always follows the training set chronologically.
+
+\subsubsection{Model Selection Criterion}
+
+The winning model is selected by \textbf{lowest RMSE} on the held-out test set:
+\begin{equation}
+\text{RMSE} = \sqrt{\frac{1}{n}\sum_{i=1}^{n}(y_i - \hat{y}_i)^2}
+\end{equation}
+
+\subsubsection{Model Artifacts}
+
+Training produces:
+\begin{itemize}
+    \item \texttt{model\_h\{horizon\}.joblib}: Serialized best model per horizon
+    \item \texttt{meta.json}: Metadata with features, metrics, and winner names
+    \item \texttt{production.txt}: Pointer to the active model directory
+\end{itemize}
+
+\subsection{Binary Classification}
+
+Located in \texttt{src/models/classify.py}, this predicts price direction.
+
+\subsubsection{Label Definition}
+\begin{equation}
+y = \begin{cases} 1 & \text{if } P_{t+h} > P_t \\ 0 & \text{otherwise} \end{cases}
+\end{equation}
+
+\subsubsection{Model}
+Logistic Regression with the same feature set:
+\begin{lstlisting}[language=Python]
+model = LogisticRegression(max_iter=1000)
+model.fit(X_train, y_train)
+prob = model.predict_proba(X_latest)[0, 1]  # P(up)
+\end{lstlisting}
+
+\subsubsection{Metrics}
+\begin{itemize}
+    \item Accuracy
+    \item F1 Score
+    \item Precision
+    \item Recall
+\end{itemize}
+
+\subsection{Dimensionality Reduction (PCA)}
+
+Located in \texttt{src/models/dimred.py}, PCA projects the high-dimensional feature space to 2D for visualization.
+
+\begin{lstlisting}[language=Python]
+def pca_2d(df, n_components=2):
+    pca = PCA(n_components=n_components)
+    proj = pca.fit_transform(df[FEATURE_COLUMNS])
+    return {
+        "explained_variance_ratio": pca.explained_variance_ratio_,
+        "points": proj.tolist(),
+        "labels": dates
+    }
+\end{lstlisting}
+
+\subsection{Clustering (KMeans)}
+
+Located in \texttt{src/models/cluster.py}, KMeans identifies market regimes.
+
+\begin{lstlisting}[language=Python]
+def kmeans_clusters(df, k=4):
+    km = KMeans(n_clusters=k, n_init=10, random_state=42)
+    labels = km.fit_predict(df[FEATURE_COLUMNS])
+    return {"k": k, "labels": labels, "centers": km.cluster_centers_}
+\end{lstlisting}
+
+\subsection{Association Rule Mining}
+
+Located in \texttt{src/models/associations.py}, this discovers co-movement patterns.
+
+Using the Apriori algorithm:
+\begin{lstlisting}[language=Python]
+# Build binary matrix: 1 if symbol went up after horizon days
+itemsets = apriori(matrix, min_support=0.1, use_colnames=True)
+rules = association_rules(itemsets, metric="confidence", min_threshold=0.5)
+\end{lstlisting}
+
+Output includes:
+\begin{itemize}
+    \item \textbf{Antecedents}: Symbols that tend to precede movement
+    \item \textbf{Consequents}: Symbols that follow
+    \item \textbf{Support}: Frequency of pattern
+    \item \textbf{Confidence}: Conditional probability
+    \item \textbf{Lift}: Strength of association vs. independence
+\end{itemize}
+
+% ==============================================================================
+\section{API Design}
+% ==============================================================================
+
+\subsection{Framework}
+The API is built with \textbf{FastAPI} for its performance, automatic OpenAPI documentation, and type validation.
+
+\subsection{Endpoints}
+
+\begin{table}[H]
+\centering
+\caption{API Endpoints}
+\small
+\begin{tabular}{llp{6cm}}
+\toprule
+\textbf{Endpoint} & \textbf{Method} & \textbf{Description} \\
+\midrule
+\texttt{/health} & GET & Health check with model status \\
+\texttt{/prices} & GET & Recent prices for a symbol \\
+\texttt{/predict} & POST & Multi-horizon return predictions \\
+\texttt{/backtest} & GET & Strategy backtest metrics \\
+\texttt{/details} & POST & Advanced analytics (beta, ATR, drawdown) \\
+\texttt{/classify/movement} & POST & Binary direction prediction \\
+\texttt{/dimred/pca} & GET & PCA 2D projection \\
+\texttt{/cluster/assets} & GET & KMeans clustering results \\
+\texttt{/associations} & GET & Association rules \\
+\texttt{/recommend} & GET & Top-k symbol recommendations \\
+\texttt{/validate} & POST & Deepchecks data/model validation \\
+\texttt{/retrain} & POST & Trigger model retraining \\
+\texttt{/flow/run} & POST & Run Prefect training flow \\
+\texttt{/metrics} & GET & Prometheus metrics \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Middleware}
+
+\begin{itemize}
+    \item \textbf{Metrics}: Prometheus counters and histograms for request counts and latencies
+    \item \textbf{Logging}: JSON-structured request logging with request IDs
+\end{itemize}
+
+% ==============================================================================
+\section{Orchestration with Prefect}
+% ==============================================================================
+
+\subsection{Training Flow}
+
+Located in \texttt{src/prefect/flows.py}:
+
+\begin{lstlisting}[language=Python, caption=Prefect Training Flow]
+@flow(name="mh_predictor_flow")
+def main_flow(symbol: str = DEFAULT_SYMBOL):
+    js = fetch_data(symbol)        # Task with retries
+    df = feature_pipeline(js)      # Includes Deepchecks gate
+    model_dir = train_pipeline(df) # Train all horizons
+    notify("success", f"Model dir: {model_dir}")
+    return {"model_dir": model_dir}
+\end{lstlisting}
+
+\subsection{Tasks}
+
+\begin{enumerate}
+    \item \textbf{fetch\_data}: Fetches data from Alpha Vantage (2 retries, 15s delay)
+    \item \textbf{feature\_pipeline}: Engineers features, runs Deepchecks validation, fails if data quality issues detected
+    \item \textbf{train\_pipeline}: Trains all horizon models
+\end{enumerate}
+
+\subsection{Data Quality Gate}
+
+The flow integrates Deepchecks to validate data before training:
+\begin{lstlisting}[language=Python]
+checks = run_data_checks(df)
+if not checks.get("passed", False):
+    raise RuntimeError("Deepchecks data integrity failed")
+\end{lstlisting}
+
+% ==============================================================================
+\section{Data Validation with Deepchecks}
+% ==============================================================================
+
+Located in \texttt{src/validation/deepchecks\_suite.py}:
+
+\subsection{Data Integrity Suite}
+Checks for:
+\begin{itemize}
+    \item Missing values
+    \item Duplicate rows
+    \item Outliers
+    \item Data type consistency
+    \item Feature distributions
+\end{itemize}
+
+\subsection{Model Evaluation Suite}
+Checks for:
+\begin{itemize}
+    \item Model performance metrics
+    \item Error distribution analysis
+    \item Feature importance sanity
+\end{itemize}
+
+% ==============================================================================
+\section{Deployment}
+% ==============================================================================
+
+\subsection{Docker Configuration}
+
+\subsubsection{Dockerfile}
+\begin{lstlisting}[language=Docker, caption=Dockerfile]
+FROM python:3.11-slim AS base
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY src /app/src
+COPY data /app/data
+COPY models /app/models
+
+# Create non-root user
+RUN addgroup --system appgroup && \
+    adduser --system --ingroup appgroup appuser
+USER appuser
+
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -fsS http://localhost:8000/health || exit 1
+CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", 
+     "--port", "8000", "--proxy-headers"]
+\end{lstlisting}
+
+\subsubsection{Docker Compose}
+\begin{lstlisting}[language=yaml, caption=docker-compose.yml]
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../models:/app/models
+      - ../data:/app/data
+\end{lstlisting}
+
+\subsection{Running the Container}
+
+For development with bind-mounted source:
+\begin{lstlisting}[language=bash]
+docker run -d --name infra_api -p 8001:8000 \
+  --user 1000:1000 \
+  --env-file /path/to/infra/.env \
+  -v /path/to/models:/app/models \
+  -v /path/to/data:/app/data \
+  -v /path/to/src/web:/app/src/web \
+  infra-api:latest
+\end{lstlisting}
+
+\subsection{CI/CD Pipeline}
+
+Located in \texttt{.github/workflows/ci.yml}:
+
+\begin{enumerate}
+    \item \textbf{Linting}: Black (formatting), Flake8 (style), MyPy (types)
+    \item \textbf{Testing}: Pytest with coverage
+    \item \textbf{Docker Build}: Build and optionally push image
+\end{enumerate}
+
+% ==============================================================================
+\section{Web Interface}
+% ==============================================================================
+
+\subsection{Static UI}
+
+The interface is a static HTML/CSS/JS application served by FastAPI at \texttt{/}.
+
+\subsubsection{Features}
+\begin{itemize}
+    \item \textbf{Predictions View}: Price chart and multi-horizon predictions
+    \item \textbf{Further Details View}: 
+    \begin{itemize}
+        \item Correlation heatmap
+        \item Rolling volatility chart
+        \item ATR and drawdown visualization
+        \item Prediction intervals
+        \item PCA scatter plot
+        \item Cluster distribution
+        \item Association rules table
+    \end{itemize}
+\end{itemize}
+
+
+
+% ==============================================================================
+\section{Testing}
+% ==============================================================================
+
+Tests are located in \texttt{tests/}:
+
+\begin{itemize}
+    \item \texttt{test\_api.py}: API endpoint tests
+    \item \texttt{test\_api\_ml.py}: ML-specific API tests
+    \item \texttt{test\_models.py}: Unit tests for model modules
+\end{itemize}
+
+Example test:
+\begin{lstlisting}[language=Python]
+def test_classify_model_runs():
+    df = make_df()  # Generate synthetic data
+    res = train_and_predict(df, horizon=1)
+    assert 0.0 <= res.probs <= 1.0
+    assert set(res.metrics.keys()) >= {"accuracy", "f1"}
+\end{lstlisting}
+
+% ==============================================================================
+\section{Configuration}
+% ==============================================================================
+
+Configuration is managed through environment variables in \texttt{src/utils/config.py}:
+
+\begin{table}[H]
+\centering
+\caption{Environment Variables}
+\begin{tabular}{llp{5cm}}
+\toprule
+\textbf{Variable} & \textbf{Default} & \textbf{Description} \\
+\midrule
+ALPHAVANTAGE\_API\_KEY & (required) & API key for data access \\
+DEFAULT\_SYMBOL & AAPL & Default symbol for predictions \\
+HORIZONS & 1,3,7,30 & Prediction horizons \\
+ALPHAVANTAGE\_RATE\_LIMIT\_S & 12.0 & Rate limit delay \\
+PRICES\_CACHE\_TTL\_S & 300 & Cache TTL in seconds \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ==============================================================================
+\section{Results and Evaluation}
+% ==============================================================================
+
+\subsection{Model Performance}
+
+Model selection is performed automatically during training. Typical results show:
+
+\begin{itemize}
+    \item Short horizons (1-3 days): Linear models often win due to noise
+    \item Longer horizons (7-30 days): Tree-based models capture trends better
+\end{itemize}
+
+\subsection{Backtest Metrics}
+
+The backtesting module evaluates strategies using:
+\begin{itemize}
+    \item \textbf{Cumulative Return}: Total P\&L over the test period
+    \item \textbf{Sharpe Ratio}: Risk-adjusted return ($\times\sqrt{252}$ annualized)
+    \item \textbf{Maximum Drawdown}: Worst peak-to-trough decline
+\end{itemize}
+
+% ==============================================================================
+\section{Future Work}
+% ==============================================================================
+
+\begin{enumerate}
+    \item \textbf{Additional Data Sources}: Incorporate sentiment data, economic indicators
+    \item \textbf{Deep Learning Models}: LSTM, Transformer architectures
+    \item \textbf{Real-time Streaming}: WebSocket updates for live predictions
+    \item \textbf{Portfolio Optimization}: Multi-asset allocation strategies
+    \item \textbf{Explainability}: SHAP values for model interpretation
+    \item \textbf{Cloud Deployment}: Kubernetes orchestration, auto-scaling
+\end{enumerate}
+
+% ==============================================================================
+\section{Conclusion}
+% ==============================================================================
+
+This project demonstrates a complete machine learning pipeline for stock market prediction, from data ingestion to model deployment. Key achievements include:
+
+\begin{itemize}
+    \item Robust data pipeline with caching and rate limiting
+    \item Multi-horizon prediction with automatic model selection
+    \item Comprehensive API with 15+ endpoints
+    \item Data quality gates preventing bad model deployments
+    \item Containerized deployment for reproducibility
+    \item Interactive web interface for exploration
+\end{itemize}
+
+The modular architecture allows easy extension to new models, data sources, and deployment targets.
+
+% ==============================================================================
+\section{References}
+% ==============================================================================
+
+\begin{enumerate}
+    \item Alpha Vantage API Documentation: \url{https://www.alphavantage.co/documentation/}
+    \item FastAPI Documentation: \url{https://fastapi.tiangolo.com/}
+    \item Prefect Documentation: \url{https://docs.prefect.io/}
+    \item Deepchecks Documentation: \url{https://docs.deepchecks.com/}
+    \item scikit-learn Documentation: \url{https://scikit-learn.org/}
+    \item XGBoost Documentation: \url{https://xgboost.readthedocs.io/}
+\end{enumerate}
+
+% ==============================================================================
+\appendix
+\section{API Response Examples}
+% ==============================================================================
+
+\subsection{/predict Response}
+\begin{lstlisting}[language=json]
+{
+  "symbol": "AAPL",
+  "predictions": {
+    "1": 0.0023,
+    "3": 0.0067,
+    "7": 0.0142,
+    "30": 0.0356
+  },
+  "model_dir": "/app/models/mh_price_20251201111138"
+}
+\end{lstlisting}
+
+\subsection{/classify/movement Response}
+\begin{lstlisting}[language=json]
+{
+  "symbol": "AAPL",
+  "horizon": 5,
+  "probability_up": 0.67,
+  "prediction": "UP",
+  "metrics": {
+    "accuracy": 0.58,
+    "f1": 0.61,
+    "precision": 0.59,
+    "recall": 0.63
+  }
+}
+\end{lstlisting}
+
+\end{document}
