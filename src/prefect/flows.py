@@ -24,10 +24,9 @@ def feature_pipeline(js: dict):
     df = json_to_ohlcv(js)
     df = compute_features(df)
     df = add_labels(df, HORIZONS)
-    # Deepchecks skipped for demo - limited data from Alpha Vantage compact mode
-    # checks = run_data_checks(df)
-    # if not checks.get("passed", False):
-    #     raise RuntimeError("Deepchecks data integrity failed")
+    checks = run_data_checks(df)
+    if not checks.get("passed", False):
+        raise RuntimeError("Deepchecks data integrity failed")
     return df
 
 
